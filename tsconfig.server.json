@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["esnext"],
+    "target": "es2019",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "outDir": "./dist",
+    "isolatedModules": false,
+    "noEmit": false
+  },
+  "include": ["./src/server.ts", "./src/server/**/*"]
+}

@@ -1,0 +1,47 @@
+{
+  "name": "nettag",
+  "version": "1.0.0",
+  "description": "NetTag file utility",
+  "homepage": "https://github.com/EPelk/NetTag#readme",
+  "bugs": {
+    "url": "https://github.com/EPelk/NetTag/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EPelk/NetTag.git"
+  },
+  "license": "ISC",
+  "author": "Ethan Pelkie",
+  "private": true,
+  "type": "module",
+  "main": "./src/server.ts",
+  "scripts": {
+    "dev": "nodemon",
+    "next": "next dev",
+    "build": "next build && tsc --project tsconfig.server.json",
+    "start": "cross-env NODE_ENV=production node ./dist/server.js",
+    "test": "echo NOT YET IMPLEMENTED",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "cross-env": "^10.1.0",
+    "next": "16.1.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/express": "^5",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "babel-plugin-react-compiler": "1.0.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "nodemon": "^3.1.11",
+    "ts-node": "^10.9.2"
+  }
+}
