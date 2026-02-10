@@ -13,13 +13,12 @@
   "license": "ISC",
   "author": "Ethan Pelkie",
   "private": true,
-  "type": "module",
   "main": "./src/server.ts",
   "scripts": {
     "dev": "nodemon",
     "next": "next dev",
     "build": "next build && tsc --project tsconfig.server.json",
-    "start": "cross-env NODE_ENV=production node ./dist/server.js",
+    "start": "cross-env NODE_ENV=production node --env-file=.env ./dist/server.js",
     "test": "echo NOT YET IMPLEMENTED",
     "lint": "eslint"
   },
@@ -28,7 +27,10 @@
     "cross-env": "^10.1.0",
     "next": "16.1.6",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "conf": "^15.1.0",
+    "debug": "^4.4.3",
+    "supports-color": "^10.2.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -36,6 +38,7 @@
     "@types/express": "^5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/debug": "^4.1.12",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
