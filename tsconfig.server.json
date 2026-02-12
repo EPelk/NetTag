@@ -3,7 +3,8 @@
   "compilerOptions": {
     "lib": ["esnext"],
     "target": "es2019",
-    "module": "commonjs",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "outDir": "./dist",
     "isolatedModules": false,
     "noEmit": false
