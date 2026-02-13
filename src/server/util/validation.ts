@@ -1,7 +1,4 @@
-export {
-    isObject,
-    isValidFilename
-};
+export { isObject, isValidFilename };
 
 /**
  * Tests whether an input is an object, excluding arrays and `null`.
@@ -16,26 +13,6 @@ const isObject = (test_val: unknown): test_val is object => {
     );
 };
 
-// Construct windows-exclusive regex string for use in the below function
-
-// Printable ASCII characters
-const win_forbidden_printable_ascii = /[<>:"\\|?*]/;
-// ASCII control characters (1-31)
-let win_forbidden_control_chars = "";
-for (let i = 1; i <= 31; ++i) {
-    win_forbidden_control_chars += String.fromCharCode(i);
-}
-// ' ' or '.' at end of filename
-const win_forbidden_suffix = /([ \.]$)/;
-
-const WIN_FORBIDDEN_REGEX = new RegExp(
-    win_forbidden_printable_ascii.source +
-        "|" +
-        `[${win_forbidden_control_chars}]` +
-        "|" +
-        win_forbidden_suffix.source,
-);
-
 /**
  * Tests if a string is a valid filename based on the following rules:
  * - `/` and `\0` characters are forbidden.
@@ -43,23 +20,61 @@ const WIN_FORBIDDEN_REGEX = new RegExp(
  *
  * If environment variable `ENFORCE_WINDOWS_FILENAMES` is set, the following
  * rules also apply:
- * - `<`, `>`, `:`, `"`, `/`, `|`, `?`, and `*` are forbidden characters.
+ * - `<`, `>`, `:`, `"`, `\`, `|`, `?`, and `*` are forbidden characters.
  * - ASCII control characters (code points `0` thru `31`) are forbidden.
  * - Filenames cannot end with `.` or `' '` (space).
- * @param {string} test_str String to test.
+ *
+ * If parameter `allowSubDir` is true, `/` and `\` are allowed as long as they
+ * are not the last character in the string.
+ * @param {string} testStr String to test.
+ * @param {boolean} allowSubDir Whether to allow slashes in path name.
  * @returns {boolean} `true` if valid, `false` otherwise.
  */
-const isValidFilename = (test_str: string): boolean => {
+const isValidFilename = (
+    testStr: string,
+    allowSubDir: boolean = false,
+): boolean => {
+    // Construct windows-exclusive regex string for use in the below function
+
+    // Printable ASCII characters
+    const win_forbidden_printable_ascii = allowSubDir
+        ? /[<>:"|?*]/
+        : /[<>:"\\|?*]/;
+    // ASCII control characters (1-31)
+    let win_forbidden_control_chars = "";
+    for (let i = 1; i <= 31; ++i) {
+        win_forbidden_control_chars += String.fromCharCode(i);
+    }
+    // ' ' or '.' at end of filename
+    // Also include '\' in case allowSubDir is true, in which case
+    // win_forbidden_printable_ascii does not catch '\'.
+    const win_forbidden_suffix = /([\\ \.]$)/;
+
+    const WIN_FORBIDDEN_REGEX = new RegExp(
+        win_forbidden_printable_ascii.source +
+            "|" +
+            `[${win_forbidden_control_chars}]` +
+            "|" +
+            win_forbidden_suffix.source,
+    );
+
+    // Illegal characters on all systems ('\', \0)
+    const illegal_chars = allowSubDir ? /\0/ : /[\/\0]/;
+    // Illegal suffix on all systems (for purposes of this function)
+    const illegal_suffix = /\\$/;
+
     return (
         // Check empty
-        test_str !== "" &&
+        testStr !== "" &&
         // Check reserved directory names
-        test_str !== "." &&
-        test_str !== ".." &&
+        testStr !== "." &&
+        testStr !== ".." &&
         // '/' and NULL bytes are illegal on all systems
-        test_str.match(/[\/\0]/) === null &&
+        testStr.match(illegal_chars) === null &&
+        // Check that file does not end in a slash
+        testStr.match(illegal_suffix) === null &&
         // Check windows-exclusive forbidden characters if needed
         (!process.env.ENFORCE_WINDOWS_FILENAMES ||
-            test_str.match(WIN_FORBIDDEN_REGEX) === null)
+            testStr.match(WIN_FORBIDDEN_REGEX) === null)
     );
 };

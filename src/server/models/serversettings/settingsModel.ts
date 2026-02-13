@@ -1,7 +1,7 @@
 import { isObject, isValidFilename } from "../../util/validation";
 import { ObjectKey } from "../../types/utilityTypes";
 import {
-    TrackedExtensionsShape,
+    PathFragmentListShape,
     EnableThumbnailCacheShape,
     SettingTable,
 } from "../../types/settingTypes";
@@ -37,6 +37,58 @@ const buildSettingType = <DataShape>(
         envVar: envVar,
         shapeDebugStr: shapeDebugStr,
     };
+};
+/**
+ * Automate creation of white/blacklist settings for extensions, filenames, and
+ * directories since these settings are nearly identical.
+ *
+ * @param {string} envVar Name of the environment variable for the setting.
+ * @param {boolean} allowSubDir Whether to allow slashes (i.e. subdirectories)
+ *                              in path fragments.
+ * @param {boolean} allowEmptyStr Whether `""` is a valid path fragment.
+ * @returns A `Setting` object.
+ */
+const buildPathFragmentSetting = (
+    envVar: string,
+    allowSubDir: boolean,
+    allowEmptyStr: boolean,
+) => {
+    return buildSettingType<PathFragmentListShape>(
+        (data): data is PathFragmentListShape => {
+            // Test if data is an object. If it is, assert its properties
+            // and continue validating.
+            const dataGuard = (
+                obj: unknown,
+            ): obj is Partial<PathFragmentListShape> => isObject(obj);
+            if (dataGuard(data)) {
+                return (
+                    // data.whitelist exists and is bool
+                    typeof data?.whitelist === "boolean" &&
+                    // data.extensions is an array
+                    Array.isArray(data?.pathFragments) &&
+                    // if data is a whitelist, it cannot be empty
+                    !(data.whitelist && data.pathFragments.length === 0) &&
+                    // all extensions are strings and valid filename components (or '').
+                    // Do not bother checking for duplicates.
+                    data.pathFragments.every((ext: unknown) => {
+                        // Only allow ext to be empty if allowEmptyStr is set
+                        const emtpyStringTest = allowEmptyStr
+                            ? ext === ""
+                            : false;
+                        return (
+                            typeof ext === "string" &&
+                            (isValidFilename(ext, allowSubDir) ||
+                                emtpyStringTest)
+                        );
+                    })
+                );
+            }
+            // data is not an object
+            return false;
+        },
+        envVar, // envVar
+        "{ whitelist: boolean; pathFragments: Array<string> }", // shapeDebugStr
+    );
 };
 
 // TODO: Update this documentation to reflect current behavior
@@ -88,44 +140,23 @@ const settingTable = createSettingTable({
      * ```
      * {
      *   whitelist: boolean,
-     *   extensions: Array<string>
+     *   pathFragments: Array<string>
      * }
      * ```
      * @param {boolean} whitelist Whether this is a whitelist of extensions to
      *                            track or a blacklist of extensions to ignore.
-     * @param {Array<string>} extensions List of extensions. An empty string
-     *                                   denotes that a file has no extension.
+     * @param {Array<string>} pathFragments List of extensions. An empty string
+     *                                      denotes that a file has no extension.
      */
-    trackedExtensions: buildSettingType<TrackedExtensionsShape>(
-        (data): data is TrackedExtensionsShape => {
-            // Test if data is an object. If it is, assert its properties
-            // and continue validating.
-            const dataGuard = (
-                obj: unknown,
-            ): obj is Partial<TrackedExtensionsShape> => isObject(obj);
-            if (dataGuard(data)) {
-                return (
-                    // data.whitelist exists and is bool
-                    typeof data?.whitelist === "boolean" &&
-                    // data.extensions is an array
-                    Array.isArray(data?.extensions) &&
-                    // if data is a whitelist, it cannot be empty
-                    !(data.whitelist && data.extensions.length === 0) &&
-                    // all extensions are strings and valid filename components (or '').
-                    // Do not bother checking for duplicates.
-                    data.extensions.every(
-                        (ext: unknown) =>
-                            typeof ext === "string" &&
-                            (isValidFilename(ext) || ext === ""),
-                    )
-                );
-            }
-            // data is not an object
-            return false;
-        },
-        "TRACKED_EXTENSIONS", // envVar
-        "{ whitelist: boolean; extensions: Array<string> }", // shapeDebugStr
-    ),
+    trackedExtensions: buildPathFragmentSetting("TRACKED_EXTENSIONS", false, true),
+    /**
+     * Filenames, not including extensions, to be tracked/ignored.
+     */
+    trackedFilenames: buildPathFragmentSetting("TRACKED_FILENAMES", false, false),
+    /**
+     * Directories, including nested directories (e.g. foo/bar) to be tracked/ingored.
+     */
+    trackedDirectories: buildPathFragmentSetting("TRACKED_DIRECTORIES", true, false),
     enableThumbnailCache: buildSettingType<boolean>(
         (data): data is EnableThumbnailCacheShape => {
             return typeof data === "boolean";

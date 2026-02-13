@@ -20,5 +20,5 @@ export type SettingTable = {
     readonly [settingName: string]: Setting<unknown, unknown>;
 };
 
-export type TrackedExtensionsShape = { whitelist: boolean; extensions: Array<string> };
+export type PathFragmentListShape = { whitelist: boolean; pathFragments: Array<string> };
 export type EnableThumbnailCacheShape = boolean;

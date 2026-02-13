@@ -41,7 +41,7 @@ function testConfigService(config: ConfigService) {
     try {
         log(
             config.get("trackedExtensions"),
-            config.get("trackedExtensions").extensions,
+            config.get("trackedExtensions").pathFragments,
         );
     } catch (e) {
         log(stringifyError(e));
@@ -59,7 +59,7 @@ function testConfigService(config: ConfigService) {
     try {
         config.set("trackedExtensions", {
             whitelist: false,
-            extensions: ["mpv", "json"],
+            pathFragments: ["mpv", "json"],
         });
     } catch (e) {
         log(stringifyError(e));
