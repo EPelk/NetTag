@@ -1,4 +1,10 @@
-export { isObject, isValidFilename };
+import { parseEnv } from "./helpers";
+
+export {
+    isObject,
+    isValidFilename,
+    hasTraversalSequences,
+};
 
 /**
  * Tests whether an input is an object, excluding arrays and `null`.
@@ -18,63 +24,102 @@ const isObject = (test_val: unknown): test_val is object => {
  * - `/` and `\0` characters are forbidden.
  * - `"."`, `".."`, and `""` (empty string) are forbidden filenames.
  *
- * If environment variable `ENFORCE_WINDOWS_FILENAMES` is set, the following
- * rules also apply:
+ * If `interchangableSlashes` is set, the following applies:
+ * - `\` is forbidden.
+ *
+ * If platform is win32 or env var `ENFORCE_WINDOWS_FILENAMES` is set,
+ * the following rules also apply:
  * - `<`, `>`, `:`, `"`, `\`, `|`, `?`, and `*` are forbidden characters.
  * - ASCII control characters (code points `0` thru `31`) are forbidden.
  * - Filenames cannot end with `.` or `' '` (space).
  *
- * If parameter `allowSubDir` is true, `/` and `\` are allowed as long as they
- * are not the last character in the string.
+ * If parameter `allowSubDir` is true, `/` and `\` are allowed, overriding
+ * the above rules.
  * @param {string} testStr String to test.
  * @param {boolean} allowSubDir Whether to allow slashes in path name.
+ * @param {boolean} interchangableSlashes Whether to treat '/' and '\' as the same, even if
+ *                                        '\' would otherwise be allowed.
  * @returns {boolean} `true` if valid, `false` otherwise.
  */
 const isValidFilename = (
     testStr: string,
     allowSubDir: boolean = false,
+    interchangableSlashes: boolean = true,
 ): boolean => {
-    // Construct windows-exclusive regex string for use in the below function
+    // Whether to block characters that are illegal in Windows
+    const enforceWindowsRules =
+        process.platform === "win32" ||
+        parseEnv("ENFORCE_WINDOWS_FILENAMES") === true;
 
-    // Printable ASCII characters
-    const win_forbidden_printable_ascii = allowSubDir
-        ? /[<>:"|?*]/
-        : /[<>:"\\|?*]/;
-    // ASCII control characters (1-31)
-    let win_forbidden_control_chars = "";
-    for (let i = 1; i <= 31; ++i) {
-        win_forbidden_control_chars += String.fromCharCode(i);
+    // Determine which characters to block
+
+    // Handle directory separators
+    // Trailing slashes (e.g. 'foobar/') are treated the same as internal slashes
+    let blockedSlashes = "";
+    // Only block slashes if subdirectories are not allowed
+    if (!allowSubDir) {
+        // '/' is a directory separator on all systems
+        blockedSlashes += "\\/";
+        // Block '\' if windows rules are enforced or slashes are treated as interchangeable
+        if (enforceWindowsRules || interchangableSlashes) {
+            // String interpretation reduces this to '\\' before regex initialization kicks in
+            blockedSlashes += "\\\\";
+        }
     }
-    // ' ' or '.' at end of filename
-    // Also include '\' in case allowSubDir is true, in which case
-    // win_forbidden_printable_ascii does not catch '\'.
-    const win_forbidden_suffix = /([\\ \.]$)/;
 
-    const WIN_FORBIDDEN_REGEX = new RegExp(
-        win_forbidden_printable_ascii.source +
-            "|" +
-            `[${win_forbidden_control_chars}]` +
-            "|" +
-            win_forbidden_suffix.source,
+    // Handle windows-exclusive illegal characters
+    let winForbiddenInternal = "";
+    let winForbiddenSuffix = "";
+    if (enforceWindowsRules) {
+        // Printable ASCII characters
+        winForbiddenInternal += '<>:\"|?*';
+        // ASCII control characters (1-31)
+        for (let i = 1; i <= 31; ++i) {
+            winForbiddenInternal += String.fromCharCode(i);
+        }
+        // ' ' or '.' at end of filename
+        // Since this only applies at the end of a file name, create a separate
+        // regex capturing group and add a union operator.
+        winForbiddenSuffix = "|([ \.]$)";
+    }
+
+    /* Construct regex matching any illegal character as calculated above.
+       Takes one of the following forms:
+       - /[\0]/                                  (block only Unix forbidden; subdirs allowed)
+       - /[\0\\]/                                (block only Unix forbidden; subdirs blocked)
+       - /[\0\/\\]/                              (block only Unix forbidden; subdirs blocked; slashes interchangable)
+       - /[\0<>:"|?*{ASCII 1-31}]|([ \.]$)/      (block win forbidden; subdirs allowed)
+       - /[\0\/\\<>:"|?*{ASCII 1-31}]|([ \.]$)/  (block win forbidden; subdirs blocked)
+    */
+    const illegalChars = new RegExp(
+        `[\0${blockedSlashes}${winForbiddenInternal}]${winForbiddenSuffix}`,
     );
 
-    // Illegal characters on all systems ('\', \0)
-    const illegal_chars = allowSubDir ? /\0/ : /[\/\0]/;
-    // Illegal suffix on all systems (for purposes of this function)
-    const illegal_suffix = /\\$/;
-
+    // Perform validity checks
     return (
         // Check empty
         testStr !== "" &&
         // Check reserved directory names
         testStr !== "." &&
         testStr !== ".." &&
-        // '/' and NULL bytes are illegal on all systems
-        testStr.match(illegal_chars) === null &&
-        // Check that file does not end in a slash
-        testStr.match(illegal_suffix) === null &&
-        // Check windows-exclusive forbidden characters if needed
-        (!process.env.ENFORCE_WINDOWS_FILENAMES ||
-            testStr.match(WIN_FORBIDDEN_REGEX) === null)
+        // Check all others
+        testStr.match(illegalChars) === null
     );
+};
+
+/**
+ * Tests whether a string contains `./` or `../`, which can be used in path traversal attacks.
+ * Note that this will not detect URL encoded sequences (e.g. %2e%2e%2f).
+ *
+ * @param {string} testStr String to test.
+ * @param {boolean} checkWindowsSequences Whether to also check for `.\` and `..\`.
+ * @returns Whether `testStr` contains traversal sequences.
+ */
+const hasTraversalSequences = (
+    testStr: string,
+    checkWindowsSequences: boolean = true,
+): boolean => {
+    const nixMatch = testStr.match(/(\.\/)|(\.\.\/)/);
+    const winMatch = testStr.match(/(\.\\)|(\.\.\\)/);
+    return nixMatch !== null || (checkWindowsSequences && winMatch !== null);
 };
