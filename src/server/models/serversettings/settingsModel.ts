@@ -1,9 +1,11 @@
-import { isObject, isValidFilename } from "../../util/validation";
+import { isValidFilename, partialObjGuard } from "../../util/validation";
 import { ObjectKey } from "../../types/utilityTypes";
 import {
     PathFragmentListShape,
     EnableThumbnailCacheShape,
-    SettingTable,
+    SettingTableData,
+    InterchangeableSlashesShape,
+    PathFragment,
 } from "../../types/settingTypes";
 import { stringify } from "../../util/helpers";
 
@@ -18,7 +20,7 @@ export { settingTable };
  * @param shapeDebugStr String describing the setting's value's intended shape.
  * @returns An object of type `Setting`.
  */
-const buildSettingType = <DataShape>(
+const buildSetting = <DataShape>(
     validateFn: (data: unknown) => data is DataShape,
     envVar: string,
     shapeDebugStr: string,
@@ -38,6 +40,11 @@ const buildSettingType = <DataShape>(
         shapeDebugStr: shapeDebugStr,
     };
 };
+
+// TODO: Reevaluate whether the below should call isValidFilename(). It may be
+//       prudent to rely on the fact that illegal names will simply fail to match
+//       anything.
+
 /**
  * Automate creation of white/blacklist settings for extensions, filenames, and
  * directories since these settings are nearly identical.
@@ -53,33 +60,46 @@ const buildPathFragmentSetting = (
     allowSubDir: boolean,
     allowEmptyStr: boolean,
 ) => {
-    return buildSettingType<PathFragmentListShape>(
+    return buildSetting<PathFragmentListShape>(
         (data): data is PathFragmentListShape => {
-            // Test if data is an object. If it is, assert its properties
-            // and continue validating.
-            const dataGuard = (
-                obj: unknown,
-            ): obj is Partial<PathFragmentListShape> => isObject(obj);
-            if (dataGuard(data)) {
+            if (partialObjGuard<PathFragmentListShape>(data)) {
                 return (
                     // data.whitelist exists and is bool
                     typeof data?.whitelist === "boolean" &&
-                    // data.extensions is an array
+                    // data.pathFragments is an array
                     Array.isArray(data?.pathFragments) &&
                     // if data is a whitelist, it cannot be empty
                     !(data.whitelist && data.pathFragments.length === 0) &&
-                    // all extensions are strings and valid filename components (or '').
+                    // all fragments are strings and valid filename components (or '').
                     // Do not bother checking for duplicates.
-                    data.pathFragments.every((ext: unknown) => {
-                        // Only allow ext to be empty if allowEmptyStr is set
-                        const emtpyStringTest = allowEmptyStr
-                            ? ext === ""
-                            : false;
-                        return (
-                            typeof ext === "string" &&
-                            (isValidFilename(ext, allowSubDir) ||
-                                emtpyStringTest)
-                        );
+                    data.pathFragments.every((fragment: unknown) => {
+                        if (partialObjGuard<PathFragment>(fragment)) {
+                            // Validate .caseSensitive and .interchangeableSlashes
+                            if (
+                                typeof fragment?.caseSensitive !== "boolean" ||
+                                typeof fragment?.interchangeableSlashes !==
+                                    "boolean"
+                            ) {
+                                return false;
+                            }
+                            // Empty fragment strings are only allowed if allowEmptyStr is set
+                            else if (!allowEmptyStr && fragment?.data === "") {
+                                return false;
+                            }
+                            // Check fragment validity.
+                            else {
+                                return (
+                                    typeof fragment?.data === "string" &&
+                                    isValidFilename(
+                                        fragment.data,
+                                        allowSubDir,
+                                        fragment.interchangeableSlashes,
+                                    )
+                                );
+                            }
+                        } else {
+                            return false;
+                        }
                     })
                 );
             }
@@ -87,13 +107,13 @@ const buildPathFragmentSetting = (
             return false;
         },
         envVar, // envVar
-        "{ whitelist: boolean; pathFragments: Array<string> }", // shapeDebugStr
+        "{ whitelist: boolean; caseSensitive: boolean; pathFragments: Array<string> }", // shapeDebugStr
     );
 };
 
 // TODO: Update this documentation to reflect current behavior
 /**
- * @typedef {Object} ConcreteSettingTable
+ * @typedef {Object} SettingTable
  * @property {function} hasKey - Tests whether the table contains a setting
  *                               with a given key.
  * @property {function} getSetting - Returns the setting for a given key.
@@ -102,10 +122,10 @@ const buildPathFragmentSetting = (
 /**
  * A function to convert a generic SettingTable into a getter function with
  * concrete return types (and thus type narrowing) on its validate() functions.
- * @param {SettingTable} table The SettingTable to use.
- * @returns {ConcreteSettingTable} The concrete setting table.
+ * @param {SettingTableData} table The SettingTable data to use.
+ * @returns {SettingTable} The concrete setting table.
  */
-function createSettingTable<Settings extends SettingTable>(table: Settings) {
+function buildSettingTable<Settings extends SettingTableData>(table: Settings) {
     // Based on https://stackoverflow.com/a/76291341
 
     // Build table functions
@@ -132,7 +152,7 @@ function createSettingTable<Settings extends SettingTable>(table: Settings) {
     };
 }
 
-const settingTable = createSettingTable({
+const settingTable = buildSettingTable({
     /**
      * File extensions to be tracked or ignored by the server.
      *
@@ -148,17 +168,36 @@ const settingTable = createSettingTable({
      * @param {Array<string>} pathFragments List of extensions. An empty string
      *                                      denotes that a file has no extension.
      */
-    trackedExtensions: buildPathFragmentSetting("TRACKED_EXTENSIONS", false, true),
+    trackedExtensions: buildPathFragmentSetting(
+        "TRACKED_EXTENSIONS",
+        false,
+        true,
+    ),
     /**
      * Filenames, not including extensions, to be tracked/ignored.
      */
-    trackedFilenames: buildPathFragmentSetting("TRACKED_FILENAMES", false, false),
+    trackedFilenames: buildPathFragmentSetting(
+        "TRACKED_FILENAMES",
+        false,
+        false,
+    ),
     /**
      * Directories, including nested directories (e.g. foo/bar) to be tracked/ingored.
      */
-    trackedDirectories: buildPathFragmentSetting("TRACKED_DIRECTORIES", true, false),
-    enableThumbnailCache: buildSettingType<boolean>(
-        (data): data is EnableThumbnailCacheShape => {
+    trackedDirectories: buildPathFragmentSetting(
+        "TRACKED_DIRECTORIES",
+        true,
+        false,
+    ),
+    interchangeableSlashes: buildSetting<InterchangeableSlashesShape>(
+        (data) => {
+            return typeof data === "boolean";
+        },
+        "INTERCHANGEABLE_SLASHES", // envVar
+        "boolean", // shapeDebugStr
+    ),
+    enableThumbnailCache: buildSetting<EnableThumbnailCacheShape>(
+        (data) => {
             return typeof data === "boolean";
         },
         "ENABLE_THUMBNAIL_CACHE", // envVar

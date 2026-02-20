@@ -1,10 +1,6 @@
 import { parseEnv } from "./helpers";
 
-export {
-    isObject,
-    isValidFilename,
-    hasTraversalSequences,
-};
+export { isObject, partialObjGuard, isValidFilename, hasTraversalSequences };
 
 /**
  * Tests whether an input is an object, excluding arrays and `null`.
@@ -17,6 +13,19 @@ const isObject = (test_val: unknown): test_val is object => {
         !Array.isArray(test_val) &&
         test_val !== null
     );
+};
+
+/**
+ * Tests if a value is an object and casts it as `Partial<TargetShape>` so its
+ * properties can be validated. Intended for use as part of functions to validate
+ * that an object is of a particular shape.
+ * @param test_val Value to test
+ * @returns `isObject(test_val)`; `test_val` is narrowed to `Partial<TargetShape>`
+ */
+const partialObjGuard = <TargetShape>(
+    test_val: unknown,
+): test_val is Partial<TargetShape> => {
+    return isObject(test_val);
 };
 
 /**
@@ -36,9 +45,9 @@ const isObject = (test_val: unknown): test_val is object => {
  * If parameter `allowSubDir` is true, `/` and `\` are allowed, overriding
  * the above rules.
  * @param {string} testStr String to test.
- * @param {boolean} allowSubDir Whether to allow slashes in path name.
- * @param {boolean} interchangableSlashes Whether to treat '/' and '\' as the same, even if
- *                                        '\' would otherwise be allowed.
+ * @param {boolean} allowSubDir Whether to allow slashes in path name. Default `false`.
+ * @param {boolean} interchangableSlashes Whether to treat `/` and `\` as the same, even if
+ *                                        `\` would otherwise be allowed. Default `true`.
  * @returns {boolean} `true` if valid, `false` otherwise.
  */
 const isValidFilename = (

@@ -3,7 +3,7 @@ import debugInit, { Debugger } from "debug";
 
 import { isValidFilename } from "../util/validation";
 import { APP_NAME } from "../config/constants";
-import { SettingTable } from "../types/settingTypes";
+import { SettingTableData } from "../types/settingTypes";
 import { settingTable } from "../models/serversettings/settingsModel";
 import { parseEnv, stringify, stringifyError } from "../util/helpers";
 
@@ -103,7 +103,7 @@ export default class ConfigService {
         }
     }
 
-    #buildGetter<Settings extends SettingTable>(table: Settings) {
+    #buildGetter<Settings extends SettingTableData>(table: Settings) {
         // Type `Settings` is narrowed to the specific implementation in parameter `table`
         // Return a getter that narrows to a specific setting in the table based on `key`
         return <
